@@ -7,10 +7,29 @@ import re
 
 # ---------------- APP ----------------
 app = Flask(__name__)
-CORS(app)
-@app.route("/", methods=["GET"])
-def home():
-    return {"status": "Backend is running"}
+
+# ---------------- CORS (FIXED FOR NETLIFY + LOCAL) ----------------
+CORS(
+    app,
+    resources={
+        r"/analyze": {
+            "origins": [
+                "https://cool-palmier-1564fd.netlify.app",
+                "http://localhost:5500",
+                "http://127.0.0.1:5500"
+            ]
+        }
+    },
+    methods=["POST", "OPTIONS"],
+    allow_headers=["Content-Type"]
+)
+
+@app.after_request
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "https://cool-palmier-1564fd.netlify.app"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    return response
 
 # ---------------- GEMINI ----------------
 API_KEY = os.getenv("GEMINI_API_KEY")
@@ -22,34 +41,32 @@ MODEL = "gemini-2.5-flash"
 
 # ---------------- STATIC FALLBACK ANALYZER ----------------
 def static_analyze(code: str):
-    # Count loops
-    loops = re.findall(r'\b(for|while|do)\b', code)
+    loops = re.findall(r"\b(for|while|do)\b", code)
     loop_count = len(loops)
 
-    # Detect recursion (simple heuristic)
     recursion = False
-    func_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*{', code)
+    func_match = re.search(r"\b(\w+)\s*\([^)]*\)\s*{", code)
     if func_match:
-        func_name = func_match.group(1)
-        if len(re.findall(r'\b' + re.escape(func_name) + r'\s*\(', code)) > 1:
+        fname = func_match.group(1)
+        if len(re.findall(rf"\b{re.escape(fname)}\s*\(", code)) > 1:
             recursion = True
 
-    # Decide time complexity
     if recursion:
         time = "O(2^n)"
+        space = "O(n)"
         reasoning = ["Recursive function detected"]
     elif loop_count == 0:
         time = "O(1)"
+        space = "O(1)"
         reasoning = ["No loops detected"]
     elif loop_count == 1:
         time = "O(n)"
+        space = "O(1)"
         reasoning = ["Single loop detected"]
     else:
         time = "O(n^2)"
+        space = "O(1)"
         reasoning = ["Multiple loops detected (possible nesting)"]
-
-    # Space complexity
-    space = "O(n)" if recursion else "O(1)"
 
     return {
         "time_complexity": time,
@@ -62,7 +79,7 @@ def static_analyze(code: str):
 SYSTEM_PROMPT = """
 You are a computer science professor.
 
-Analyze the code and return ONLY valid JSON.
+Analyze the given code and return ONLY valid JSON.
 Rules:
 - IF / ELSE are NOT loops
 - Sequential loops are NOT nested
@@ -80,9 +97,17 @@ Return JSON ONLY:
 }
 """
 
-# ---------------- ROUTE ----------------
-@app.route("/analyze", methods=["POST"])
+# ---------------- ROUTES ----------------
+
+@app.route("/", methods=["GET"])
+def home():
+    return {"status": "Backend is running"}
+
+@app.route("/analyze", methods=["POST", "OPTIONS"])
 def analyze():
+    if request.method == "OPTIONS":
+        return "", 204
+
     data = request.json
     code = data.get("code", "")
     language = data.get("language", "Unknown")
@@ -116,8 +141,8 @@ Code:
             "ai_explanation": "Generated using Gemini Flash 2.5"
         })
 
-    # 2️⃣ Fallback if Gemini fails (quota / error)
-    except Exception as e:
+    # 2️⃣ Static fallback (quota / error)
+    except Exception:
         fallback = static_analyze(code)
 
         return jsonify({
@@ -128,9 +153,7 @@ Code:
             "ai_explanation": "Gemini unavailable. Static analysis used."
         })
 
-# ---------------- RUN ----------------
+# ---------------- RUN (RENDER SAFE) ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
