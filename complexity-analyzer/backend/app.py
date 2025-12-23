@@ -8,6 +8,9 @@ import re
 # ---------------- APP ----------------
 app = Flask(__name__)
 CORS(app)
+@app.route("/", methods=["GET"])
+def home():
+    return {"status": "Backend is running"}
 
 # ---------------- GEMINI ----------------
 API_KEY = os.getenv("GEMINI_API_KEY")
@@ -129,4 +132,5 @@ Code:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
