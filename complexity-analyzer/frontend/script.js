@@ -7,7 +7,7 @@ async function analyze() {
         return;
     }
 
-    const res = await fetch("http://127.0.0.1:5000/analyze", {
+    const res = await fetch("https://complexity-analyzer-1-ro0w.onrender.com/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, language })
@@ -29,3 +29,4 @@ async function analyze() {
     document.getElementById("ai").innerText = data.ai_explanation;
     document.getElementById("result").classList.remove("hidden");
 }
+
